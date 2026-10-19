@@ -1,0 +1,1611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TAPCRACKER — Electronic Tap Shoe Simulator</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0d0d1a;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        #canvas-container { width: 100vw; height: 100vh; position: relative; }
+        canvas { display: block; }
+
+        /* ── UI OVERLAY ────────────────────────────────────── */
+        .ui-overlay {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none;
+        }
+        .ui-overlay > * { pointer-events: auto; }
+
+        /* ── HEADER ────────────────────────────────────────── */
+        header {
+            position: absolute; top: 0; left: 0; right: 0;
+            text-align: center; padding: 12px 20px;
+            background: rgba(0,0,0,0.85);
+            border-bottom: 2px solid #ffd70066;
+            display: flex; align-items: center; justify-content: center; gap: 20px;
+        }
+        .logo {
+            font-size: 1.8em; font-weight: 900; letter-spacing: 6px;
+            background: linear-gradient(135deg, #ffd700, #ff8c00);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            text-shadow: none;
+        }
+        .tagline {
+            color: #888; font-size: 0.8em; font-style: italic;
+        }
+
+        /* ── TAB BAR ───────────────────────────────────────── */
+        .tab-container {
+            position: absolute; top: 70px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 8px; padding: 8px 16px;
+            background: rgba(0,0,0,0.8); border-radius: 25px;
+            border: 1px solid #333;
+        }
+        .tab-btn {
+            padding: 8px 20px; font-size: 0.85em; font-weight: bold;
+            border: 2px solid #444; background: transparent; color: #aaa;
+            border-radius: 18px; cursor: pointer; transition: all 0.3s ease;
+        }
+        .tab-btn:hover { background: rgba(100,100,100,0.3); color: #ddd; }
+        .tab-btn.active {
+            background: linear-gradient(135deg, #333, #222);
+            color: white; border-color: #ffd70088;
+        }
+
+        /* ── LEFT PANEL (Rhythms + Hints) ──────────────────── */
+        .left-panel {
+            position: absolute; top: 120px; left: 15px; width: 200px;
+            display: flex; flex-direction: column; gap: 12px;
+        }
+        .panel-box {
+            background: rgba(0,0,0,0.85); border-radius: 12px;
+            border: 1px solid #2a2a3a; padding: 14px;
+        }
+        .panel-title {
+            color: #666; font-size: 0.7em; font-weight: bold;
+            text-transform: uppercase; letter-spacing: 2px;
+            margin-bottom: 10px;
+        }
+        .hint-line { color: #888; font-size: 0.75em; line-height: 1.8; }
+        .hint-line span { color: #ffd700; }
+
+        /* Rhythm buttons */
+        .rhythm-btn {
+            display: flex; align-items: center; gap: 8px;
+            width: 100%; padding: 8px 10px; margin-bottom: 6px;
+            background: rgba(255,255,255,0.04); border: 1px solid #333;
+            border-radius: 8px; color: #ccc; font-size: 0.8em;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .rhythm-btn:hover { background: rgba(255,215,0,0.08); border-color: #555; }
+        .rhythm-btn.playing {
+            background: rgba(255,215,0,0.15); border-color: #ffd700;
+            color: #ffd700;
+        }
+        .rhythm-btn .icon { font-size: 1.1em; }
+        .rhythm-stop {
+            width: 100%; padding: 8px; margin-top: 4px;
+            background: rgba(231,76,60,0.15); border: 1px solid #e74c3c44;
+            border-radius: 8px; color: #e74c3c; font-size: 0.8em;
+            cursor: pointer; transition: all 0.2s; display: none;
+        }
+        .rhythm-stop:hover { background: rgba(231,76,60,0.3); }
+        .rhythm-stop.visible { display: block; }
+
+        /* ── RIGHT PANEL (Sound / Effects / Visualizer) ────── */
+        .right-panel {
+            position: absolute; top: 120px; right: 15px; width: 220px;
+            display: flex; flex-direction: column; gap: 12px;
+        }
+
+        /* Sound display */
+        .current-sound-box { text-align: center; }
+        .current-sound {
+            font-size: 1.2em; color: #ffd700; min-height: 30px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .bpm-display {
+            display: flex; justify-content: center; gap: 15px;
+            margin-top: 8px;
+        }
+        .bpm-item { text-align: center; }
+        .bpm-value {
+            font-size: 1.4em; font-weight: bold; color: #fff;
+            font-variant-numeric: tabular-nums;
+        }
+        .bpm-label { font-size: 0.6em; color: #666; text-transform: uppercase; }
+
+        /* Velocity meter */
+        .velocity-bar-container {
+            width: 100%; height: 6px; background: #1a1a2e;
+            border-radius: 3px; overflow: hidden; margin-top: 6px;
+        }
+        .velocity-bar {
+            height: 100%; width: 0%; border-radius: 3px;
+            background: linear-gradient(90deg, #3498db, #ffd700, #e74c3c);
+            transition: width 0.08s ease-out;
+        }
+
+        /* Preset selector */
+        .preset-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+        }
+        .preset-btn {
+            padding: 8px 6px; background: rgba(255,255,255,0.04);
+            border: 1px solid #333; border-radius: 8px;
+            color: #aaa; font-size: 0.72em; cursor: pointer;
+            text-align: center; transition: all 0.2s;
+        }
+        .preset-btn:hover { border-color: #555; color: #ddd; }
+        .preset-btn.active {
+            background: rgba(255,215,0,0.12); border-color: #ffd700;
+            color: #ffd700;
+        }
+
+        /* Effects toggles */
+        .effects-row { display: flex; gap: 6px; }
+        .fx-btn {
+            flex: 1; padding: 8px 4px; background: rgba(255,255,255,0.04);
+            border: 1px solid #333; border-radius: 8px; color: #666;
+            font-size: 0.7em; font-weight: bold; cursor: pointer;
+            text-align: center; transition: all 0.2s;
+            text-transform: uppercase;
+        }
+        .fx-btn:hover { border-color: #555; }
+        .fx-btn.active-dist { background: rgba(255,140,0,0.2); border-color: #ff8c00; color: #ff8c00; }
+        .fx-btn.active-rev { background: rgba(52,152,219,0.2); border-color: #3498db; color: #3498db; }
+        .fx-btn.active-del { background: rgba(46,204,113,0.2); border-color: #2ecc71; color: #2ecc71; }
+
+        /* Visualizer */
+        .visualizer-box { padding: 10px; }
+        #visualizer {
+            width: 100%; height: 80px; border-radius: 6px;
+            background: #0a0a15; display: block;
+        }
+
+        /* ── BOTTOM CONTROLS ───────────────────────────────── */
+        .controls {
+            position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 24px; padding: 14px 30px;
+            background: rgba(0,0,0,0.88); border-radius: 14px;
+            border: 1px solid #2a2a3a;
+        }
+        .control-group {
+            display: flex; flex-direction: column; align-items: center; gap: 8px;
+        }
+        .control-label {
+            color: #555; font-size: 0.7em; font-weight: bold;
+            letter-spacing: 1px;
+        }
+        .control-keys { display: flex; gap: 8px; }
+        .key {
+            width: 52px; height: 52px;
+            background: linear-gradient(180deg, #2a2a2a, #1a1a1a);
+            border: 2px solid #444; border-radius: 10px; color: white;
+            font-weight: bold; cursor: pointer;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            transition: all 0.08s ease;
+        }
+        .key:hover { background: linear-gradient(180deg, #3a3a3a, #2a2a2a); border-color: #555; }
+        .key.active {
+            background: linear-gradient(180deg, #ffd700, #ff8c00);
+            border-color: #ffaa00; transform: translateY(2px); color: #111;
+        }
+        .key-letter { font-size: 1.2em; }
+        .key-desc { font-size: 0.5em; color: #777; }
+        .key.active .key-desc { color: #333; }
+
+        /* ── LEGEND (X-ray mode) ───────────────────────────── */
+        .legend {
+            position: absolute; bottom: 90px; right: 15px;
+            padding: 14px; background: rgba(0,0,0,0.85);
+            border-radius: 10px; border: 1px solid #2a2a3a; display: none;
+        }
+        .legend.visible { display: block; }
+        .legend h4 { color: #666; margin-bottom: 8px; font-size: 0.75em; text-transform: uppercase; letter-spacing: 1px; }
+        .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; color: #aaa; font-size: 0.72em; }
+        .legend-color { width: 12px; height: 12px; border-radius: 3px; }
+        .legend-color.sensor { background: #00ff88; }
+        .legend-color.wire { background: #ff6b6b; }
+        .legend-color.mcu { background: #3498db; }
+        .legend-color.plate { background: linear-gradient(135deg, #c0c0c0, #888); }
+
+        /* ── LOADING ───────────────────────────────────────── */
+        .loading {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ffd700; font-size: 1.4em; font-weight: 300;
+            letter-spacing: 3px;
+        }
+    </style>
+</head>
+<body>
+<div id="canvas-container">
+    <div class="loading" id="loading">LOADING TAPCRACKER...</div>
+</div>
+
+<div class="ui-overlay">
+    <header>
+        <div>
+            <div class="logo">TAPCRACKER</div>
+            <div class="tagline">The Electric Guitar — For Your Feet</div>
+        </div>
+    </header>
+
+    <div class="tab-container">
+        <button class="tab-btn active" data-view="normal">👟 3D View</button>
+        <button class="tab-btn" data-view="xray">🔬 X-Ray</button>
+    </div>
+
+    <!-- LEFT PANEL -->
+    <div class="left-panel">
+        <div class="panel-box">
+            <div class="panel-title">🎵 Rhythm Library</div>
+            <button class="rhythm-btn" data-rhythm="shuffle"><span class="icon">🔀</span> Shuffle</button>
+            <button class="rhythm-btn" data-rhythm="time-step"><span class="icon">⏱️</span> Time Step</button>
+            <button class="rhythm-btn" data-rhythm="paradiddle"><span class="icon">🥁</span> Paradiddle</button>
+            <button class="rhythm-btn" data-rhythm="shim-sham"><span class="icon">💃</span> Shim Sham</button>
+            <button class="rhythm-btn" data-rhythm="wow-demo"><span class="icon">🌟</span> WOW Demo</button>
+            <button class="rhythm-stop" id="stopBtn">⏹ Stop</button>
+        </div>
+        <div class="panel-box">
+            <div class="panel-title">Controls</div>
+            <div class="hint-line"><span>🖱️ Left Drag</span> — Rotate</div>
+            <div class="hint-line"><span>🖱️ Right Drag</span> — Pan</div>
+            <div class="hint-line"><span>⚙️ Scroll</span> — Zoom</div>
+            <div class="hint-line"><span>👆 Click Plates</span> — Tap!</div>
+        </div>
+    </div>
+
+    <!-- RIGHT PANEL -->
+    <div class="right-panel">
+        <div class="panel-box current-sound-box">
+            <div class="panel-title">Now Playing</div>
+            <div class="current-sound" id="currentSound">—</div>
+            <div class="velocity-bar-container">
+                <div class="velocity-bar" id="velocityBar"></div>
+            </div>
+            <div class="bpm-display">
+                <div class="bpm-item">
+                    <div class="bpm-value" id="bpmDisplay">—</div>
+                    <div class="bpm-label">BPM</div>
+                </div>
+                <div class="bpm-item">
+                    <div class="bpm-value" id="tapCount">0</div>
+                    <div class="bpm-label">Taps</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel-box">
+            <div class="panel-title">🎹 Sound Preset</div>
+            <div class="preset-grid">
+                <button class="preset-btn active" data-preset="classic">🥁 Classic</button>
+                <button class="preset-btn" data-preset="electric">🎸 Electric</button>
+                <button class="preset-btn" data-preset="808">🔊 808</button>
+                <button class="preset-btn" data-preset="jazz">🎷 Jazz</button>
+            </div>
+        </div>
+
+        <div class="panel-box">
+            <div class="panel-title">🎛️ Effects</div>
+            <div class="effects-row">
+                <button class="fx-btn" id="fxDist" data-fx="distortion">Dist</button>
+                <button class="fx-btn" id="fxRev" data-fx="reverb">Reverb</button>
+                <button class="fx-btn" id="fxDel" data-fx="delay">Delay</button>
+            </div>
+        </div>
+
+        <div class="panel-box visualizer-box">
+            <div class="panel-title">📊 Spectrum</div>
+            <canvas id="visualizer"></canvas>
+        </div>
+    </div>
+
+    <!-- BOTTOM KEYBOARD -->
+    <div class="controls">
+        <div class="control-group">
+            <span class="control-label">LEFT SHOE</span>
+            <div class="control-keys">
+                <div class="key" data-sound="left-toe">
+                    <span class="key-letter">Q</span><span class="key-desc">Toe</span>
+                </div>
+                <div class="key" data-sound="left-heel">
+                    <span class="key-letter">A</span><span class="key-desc">Heel</span>
+                </div>
+            </div>
+        </div>
+        <div class="control-group">
+            <span class="control-label">RIGHT SHOE</span>
+            <div class="control-keys">
+                <div class="key" data-sound="right-toe">
+                    <span class="key-letter">W</span><span class="key-desc">Toe</span>
+                </div>
+                <div class="key" data-sound="right-heel">
+                    <span class="key-letter">S</span><span class="key-desc">Heel</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="legend" id="legend">
+        <h4>Component Legend</h4>
+        <div class="legend-item"><div class="legend-color plate"></div><span>Tap Plates</span></div>
+        <div class="legend-item"><div class="legend-color sensor"></div><span>Pressure Sensors</span></div>
+        <div class="legend-item"><div class="legend-color wire"></div><span>Wiring</span></div>
+        <div class="legend-item"><div class="legend-color mcu"></div><span>MCU + Battery</span></div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+// ════════════════════════════════════════════════════════════
+//  GLOBALS
+// ════════════════════════════════════════════════════════════
+let scene, camera, renderer, controls;
+let leftShoe, rightShoe;
+let tapPlates = {};
+let isXrayMode = false;
+let internalComponents = [];
+let originalMaterials = new Map();
+let totalTaps = 0;
+let clock = new THREE.Clock();
+
+// Audio
+const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+let masterGain, analyserNode;
+let delayNode, delayFeedback;
+let convolverNode, reverbWetGain;
+let distortionCurve;
+
+// State
+let currentPreset = 'classic';
+let distortionEnabled = false;
+let reverbEnabled = false;
+let delayEnabled = false;
+
+// Velocity tracking
+const lastTapTime = {};
+
+// BPM tracking
+const tapTimestamps = [];
+
+// Visual effects
+const activeParticles = [];
+const activeRipples = [];
+
+// ════════════════════════════════════════════════════════════
+//  SOUND PRESETS
+// ════════════════════════════════════════════════════════════
+const presets = {
+    classic: {
+        name: '🥁 Classic Tap',
+        tones: {
+            toe:  { osc1: 'triangle', osc2: 'sine',     freq: 1200, mult: 2.5, Q: 3,   decay: 0.12, noiseAmt: 0.15 },
+            heel: { osc1: 'triangle', osc2: 'sine',     freq: 200,  mult: 1.5, Q: 2,   decay: 0.18, noiseAmt: 0.1  }
+        }
+    },
+    electric: {
+        name: '🎸 Electric',
+        tones: {
+            toe:  { osc1: 'sawtooth', osc2: 'square',   freq: 800,  mult: 3.0, Q: 8,   decay: 0.25, noiseAmt: 0.3  },
+            heel: { osc1: 'sawtooth', osc2: 'square',   freq: 150,  mult: 2.0, Q: 5,   decay: 0.35, noiseAmt: 0.2  }
+        }
+    },
+    '808': {
+        name: '🔊 808 Sub',
+        tones: {
+            toe:  { osc1: 'square',   osc2: 'sawtooth', freq: 6000, mult: 1.3, Q: 0.8, decay: 0.06, noiseAmt: 0.7  },
+            heel: { osc1: 'sine',     osc2: 'sine',     freq: 55,   mult: 2.0, Q: 0.5, decay: 0.45, noiseAmt: 0.05 }
+        }
+    },
+    jazz: {
+        name: '🎷 Jazz Brush',
+        tones: {
+            toe:  { osc1: 'sine',     osc2: 'triangle', freq: 2200, mult: 3.7, Q: 1.2, decay: 0.08, noiseAmt: 0.4  },
+            heel: { osc1: 'sine',     osc2: 'triangle', freq: 280,  mult: 2.2, Q: 1.5, decay: 0.15, noiseAmt: 0.2  }
+        }
+    }
+};
+
+// ════════════════════════════════════════════════════════════
+//  RHYTHM PATTERNS
+// ════════════════════════════════════════════════════════════
+const rhythms = {
+    'shuffle': {
+        name: 'Shuffle',
+        bpm: 120,
+        loop: true,
+        beats: 4,
+        notes: [
+            { beat: 0,    sound: 'right-toe',  velocity: 0.9 },
+            { beat: 0.33, sound: 'right-toe',  velocity: 0.45 },
+            { beat: 0.5,  sound: 'right-heel', velocity: 0.7 },
+            { beat: 1,    sound: 'left-toe',   velocity: 0.9 },
+            { beat: 1.33, sound: 'left-toe',   velocity: 0.45 },
+            { beat: 1.5,  sound: 'left-heel',  velocity: 0.7 },
+            { beat: 2,    sound: 'right-toe',  velocity: 0.9 },
+            { beat: 2.33, sound: 'right-toe',  velocity: 0.45 },
+            { beat: 2.5,  sound: 'right-heel', velocity: 0.7 },
+            { beat: 3,    sound: 'left-toe',   velocity: 0.9 },
+            { beat: 3.33, sound: 'left-toe',   velocity: 0.45 },
+            { beat: 3.5,  sound: 'left-heel',  velocity: 0.7 }
+        ]
+    },
+    'time-step': {
+        name: 'Time Step',
+        bpm: 130,
+        loop: true,
+        beats: 4,
+        notes: [
+            { beat: 0,    sound: 'right-heel', velocity: 1.0 },
+            { beat: 0.5,  sound: 'left-toe',   velocity: 0.6 },
+            { beat: 1,    sound: 'right-toe',  velocity: 0.8 },
+            { beat: 1.5,  sound: 'left-toe',   velocity: 0.7 },
+            { beat: 1.75, sound: 'left-heel',  velocity: 0.5 },
+            { beat: 2,    sound: 'right-toe',  velocity: 0.8 },
+            { beat: 3,    sound: 'left-heel',  velocity: 1.0 },
+            { beat: 3.5,  sound: 'right-toe',  velocity: 0.6 }
+        ]
+    },
+    'paradiddle': {
+        name: 'Paradiddle',
+        bpm: 140,
+        loop: true,
+        beats: 4,
+        notes: [
+            { beat: 0,   sound: 'right-toe',  velocity: 1.0 },
+            { beat: 0.5, sound: 'left-toe',   velocity: 0.7 },
+            { beat: 1,   sound: 'right-toe',  velocity: 0.7 },
+            { beat: 1.5, sound: 'right-heel', velocity: 0.9 },
+            { beat: 2,   sound: 'left-toe',   velocity: 1.0 },
+            { beat: 2.5, sound: 'right-toe',  velocity: 0.7 },
+            { beat: 3,   sound: 'left-toe',   velocity: 0.7 },
+            { beat: 3.5, sound: 'left-heel',  velocity: 0.9 }
+        ]
+    },
+    'shim-sham': {
+        name: 'Shim Sham',
+        bpm: 115,
+        loop: true,
+        beats: 8,
+        notes: [
+            { beat: 0,    sound: 'right-toe',  velocity: 0.8 },
+            { beat: 0.5,  sound: 'right-heel', velocity: 0.55 },
+            { beat: 1,    sound: 'left-toe',   velocity: 0.8 },
+            { beat: 1.5,  sound: 'left-heel',  velocity: 0.55 },
+            { beat: 2,    sound: 'right-toe',  velocity: 0.9 },
+            { beat: 2.25, sound: 'right-toe',  velocity: 0.4 },
+            { beat: 2.5,  sound: 'right-heel', velocity: 0.7 },
+            { beat: 3,    sound: 'left-toe',   velocity: 0.9 },
+            { beat: 3.25, sound: 'left-toe',   velocity: 0.4 },
+            { beat: 3.5,  sound: 'left-heel',  velocity: 0.7 },
+            { beat: 4,    sound: 'right-heel', velocity: 1.0 },
+            { beat: 4.5,  sound: 'left-heel',  velocity: 1.0 },
+            { beat: 5,    sound: 'right-toe',  velocity: 0.7 },
+            { beat: 5.5,  sound: 'left-toe',   velocity: 0.7 },
+            { beat: 6,    sound: 'right-toe',  velocity: 0.8 },
+            { beat: 6.5,  sound: 'right-heel', velocity: 0.55 },
+            { beat: 7,    sound: 'left-toe',   velocity: 0.9 },
+            { beat: 7.5,  sound: 'left-heel',  velocity: 0.65 }
+        ]
+    },
+    'wow-demo': {
+        name: 'WOW Demo',
+        bpm: 105,
+        loop: false,
+        beats: 26,
+        notes: [
+            // ── Section 1: Clean, slow intro (beats 0-7) ──
+            { beat: 0, action: 'preset', value: 'classic' },
+            { beat: 0, action: 'fx-off-all' },
+            { beat: 0,   sound: 'right-heel', velocity: 0.45 },
+            { beat: 1,   sound: 'left-heel',  velocity: 0.45 },
+            { beat: 2,   sound: 'right-heel', velocity: 0.55 },
+            { beat: 3,   sound: 'left-heel',  velocity: 0.55 },
+            { beat: 4,   sound: 'right-toe',  velocity: 0.65 },
+            { beat: 4.5, sound: 'right-heel', velocity: 0.5  },
+            { beat: 5,   sound: 'left-toe',   velocity: 0.65 },
+            { beat: 5.5, sound: 'left-heel',  velocity: 0.5  },
+            { beat: 6,   sound: 'right-toe',  velocity: 0.75 },
+            { beat: 6.5, sound: 'right-heel', velocity: 0.55 },
+            { beat: 7,   sound: 'left-toe',   velocity: 0.75 },
+            { beat: 7.5, sound: 'left-heel',  velocity: 0.55 },
+
+            // ── Section 2: Switch to Electric + Distortion (beats 8-15) ──
+            { beat: 8, action: 'preset', value: 'electric' },
+            { beat: 8, action: 'fx', fx: 'distortion', enabled: true },
+            { beat: 8,    sound: 'right-toe',  velocity: 0.85 },
+            { beat: 8.25, sound: 'right-heel', velocity: 0.6  },
+            { beat: 8.5,  sound: 'left-toe',   velocity: 0.85 },
+            { beat: 8.75, sound: 'left-heel',  velocity: 0.6  },
+            { beat: 9,    sound: 'right-toe',  velocity: 0.9  },
+            { beat: 9.5,  sound: 'left-toe',   velocity: 0.9  },
+            { beat: 10,   sound: 'right-toe',  velocity: 0.9  },
+            { beat: 10.25,sound: 'right-heel', velocity: 0.7  },
+            { beat: 10.5, sound: 'left-toe',   velocity: 0.9  },
+            { beat: 10.75,sound: 'left-heel',  velocity: 0.7  },
+            { beat: 11,   sound: 'right-toe',  velocity: 1.0  },
+            { beat: 11.5, sound: 'left-toe',   velocity: 1.0  },
+
+            // ── Section 3: Add Reverb + Delay, build intensity (beats 12-19) ──
+            { beat: 12, action: 'fx', fx: 'reverb', enabled: true },
+            { beat: 14, action: 'fx', fx: 'delay', enabled: true },
+            { beat: 12,   sound: 'right-toe',  velocity: 0.85 },
+            { beat: 12.25,sound: 'left-toe',   velocity: 0.7  },
+            { beat: 12.5, sound: 'right-heel', velocity: 0.9  },
+            { beat: 12.75,sound: 'left-heel',  velocity: 0.9  },
+            { beat: 13,   sound: 'right-toe',  velocity: 1.0  },
+            { beat: 13.25,sound: 'left-toe',   velocity: 0.8  },
+            { beat: 13.5, sound: 'right-toe',  velocity: 0.9  },
+            { beat: 13.75,sound: 'left-toe',   velocity: 0.9  },
+            { beat: 14,   sound: 'right-heel', velocity: 1.0  },
+            { beat: 14.25,sound: 'left-heel',  velocity: 1.0  },
+            { beat: 14.5, sound: 'right-toe',  velocity: 0.8  },
+            { beat: 14.75,sound: 'left-toe',   velocity: 0.8  },
+
+            // ── Section 4: Switch to 808 for contrast (beats 15-19) ──
+            { beat: 15, action: 'preset', value: '808' },
+            { beat: 15, action: 'fx', fx: 'distortion', enabled: false },
+            { beat: 15,   sound: 'right-heel', velocity: 1.0  },
+            { beat: 15.5, sound: 'right-toe',  velocity: 0.7  },
+            { beat: 15.75,sound: 'right-toe',  velocity: 0.5  },
+            { beat: 16,   sound: 'left-heel',  velocity: 1.0  },
+            { beat: 16.5, sound: 'left-toe',   velocity: 0.7  },
+            { beat: 16.75,sound: 'left-toe',   velocity: 0.5  },
+            { beat: 17,   sound: 'right-heel', velocity: 1.0  },
+            { beat: 17.25,sound: 'right-toe',  velocity: 0.9  },
+            { beat: 17.5, sound: 'left-heel',  velocity: 1.0  },
+            { beat: 17.75,sound: 'left-toe',   velocity: 0.9  },
+            { beat: 18,   sound: 'right-heel', velocity: 1.0  },
+            { beat: 18.12,sound: 'left-heel',  velocity: 1.0  },
+            { beat: 18.25,sound: 'right-toe',  velocity: 1.0  },
+            { beat: 18.37,sound: 'left-toe',   velocity: 1.0  },
+
+            // ── Section 5: Grand finale — rapid fire + big stomp (beats 19-25) ──
+            { beat: 19, action: 'preset', value: 'electric' },
+            { beat: 19, action: 'fx', fx: 'distortion', enabled: true },
+            { beat: 19,   sound: 'right-toe',  velocity: 1.0 },
+            { beat: 19.12,sound: 'left-toe',   velocity: 1.0 },
+            { beat: 19.25,sound: 'right-heel', velocity: 1.0 },
+            { beat: 19.37,sound: 'left-heel',  velocity: 1.0 },
+            { beat: 19.5, sound: 'right-toe',  velocity: 1.0 },
+            { beat: 19.62,sound: 'left-toe',   velocity: 1.0 },
+            { beat: 19.75,sound: 'right-heel', velocity: 1.0 },
+            { beat: 19.87,sound: 'left-heel',  velocity: 1.0 },
+            { beat: 20,   sound: 'right-toe',  velocity: 1.0 },
+            { beat: 20.1, sound: 'left-toe',   velocity: 1.0 },
+            { beat: 20.2, sound: 'right-toe',  velocity: 1.0 },
+            { beat: 20.3, sound: 'left-toe',   velocity: 1.0 },
+            { beat: 20.4, sound: 'right-heel', velocity: 1.0 },
+            { beat: 20.5, sound: 'left-heel',  velocity: 1.0 },
+            { beat: 20.6, sound: 'right-toe',  velocity: 1.0 },
+            { beat: 20.7, sound: 'left-toe',   velocity: 1.0 },
+            { beat: 20.8, sound: 'right-heel', velocity: 1.0 },
+            { beat: 20.9, sound: 'left-heel',  velocity: 1.0 },
+            // Dramatic pause at 21-24
+            // Final stomp
+            { beat: 25,   sound: 'right-heel', velocity: 1.0 },
+            { beat: 25,   sound: 'left-heel',  velocity: 1.0 },
+            { beat: 25,   sound: 'right-toe',  velocity: 1.0 },
+            { beat: 25,   sound: 'left-toe',   velocity: 1.0 }
+        ]
+    }
+};
+
+// ════════════════════════════════════════════════════════════
+//  AUDIO ENGINE
+// ════════════════════════════════════════════════════════════
+function initAudio() {
+    if (audioCtx) return;
+    audioCtx = new AudioCtxClass();
+
+    // Master gain → analyser → destination
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0.85;
+
+    analyserNode = audioCtx.createAnalyser();
+    analyserNode.fftSize = 256;
+    analyserNode.smoothingTimeConstant = 0.75;
+
+    // Delay chain (persistent)
+    delayNode = audioCtx.createDelay(2.0);
+    delayNode.delayTime.value = 0.28;
+    delayFeedback = audioCtx.createGain();
+    delayFeedback.gain.value = 0.35;
+    delayNode.connect(delayFeedback);
+    delayFeedback.connect(delayNode);
+    delayNode.connect(masterGain);
+
+    // Reverb chain (persistent)
+    convolverNode = audioCtx.createConvolver();
+    convolverNode.buffer = generateReverbImpulse(2.2, 2.5);
+    reverbWetGain = audioCtx.createGain();
+    reverbWetGain.gain.value = 0.35;
+    convolverNode.connect(reverbWetGain);
+    reverbWetGain.connect(masterGain);
+
+    // Distortion curve (pre-computed)
+    distortionCurve = makeDistortionCurve(80);
+
+    masterGain.connect(analyserNode);
+    analyserNode.connect(audioCtx.destination);
+
+    // Start visualizer
+    drawVisualizer();
+}
+
+function generateReverbImpulse(duration, decay) {
+    const rate = audioCtx.sampleRate;
+    const len = rate * duration;
+    const buf = audioCtx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++) {
+        const d = buf.getChannelData(ch);
+        for (let i = 0; i < len; i++) {
+            d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+        }
+    }
+    return buf;
+}
+
+function makeDistortionCurve(amount) {
+    const n = 44100, curve = new Float32Array(n);
+    const deg = Math.PI / 180;
+    for (let i = 0; i < n; i++) {
+        const x = (i * 2) / n - 1;
+        curve[i] = ((3 + amount) * x * 20 * deg) / (Math.PI + amount * Math.abs(x));
+    }
+    return curve;
+}
+
+function getKeyVelocity(soundId) {
+    const now = Date.now();
+    const last = lastTapTime[soundId] || 0;
+    const gap = now - last;
+    lastTapTime[soundId] = now;
+    if (gap > 500) return 0.7;
+    return Math.min(1.0, 0.7 + (500 - gap) / 1200);
+}
+
+function updateBPM() {
+    const now = Date.now();
+    tapTimestamps.push(now);
+    while (tapTimestamps.length > 1 && now - tapTimestamps[0] > 3000) {
+        tapTimestamps.shift();
+    }
+    if (tapTimestamps.length < 3) {
+        document.getElementById('bpmDisplay').textContent = '—';
+        return;
+    }
+    let total = 0;
+    for (let i = 1; i < tapTimestamps.length; i++) {
+        total += tapTimestamps[i] - tapTimestamps[i - 1];
+    }
+    const avg = total / (tapTimestamps.length - 1);
+    const bpm = Math.round(60000 / avg);
+    document.getElementById('bpmDisplay').textContent = bpm > 300 ? '—' : bpm;
+}
+
+function playSound(soundId, velocity) {
+    initAudio();
+    if (velocity === undefined) velocity = 0.8;
+    velocity = Math.max(0.1, Math.min(1.0, velocity));
+
+    const [side, part] = soundId.split('-');
+    const preset = presets[currentPreset];
+    const tone = preset.tones[part];
+    if (!tone) return;
+    const now = audioCtx.currentTime;
+
+    // Frequency with slight L/R stereo spread
+    const freqShift = side === 'left' ? 1.04 : 1.0;
+    const baseFreq = tone.freq * freqShift;
+
+    // Oscillator 1
+    const osc1 = audioCtx.createOscillator();
+    osc1.type = tone.osc1;
+    osc1.frequency.setValueAtTime(baseFreq, now);
+    // Pitch drop on heel for realism
+    if (part === 'heel') {
+        osc1.frequency.exponentialRampToValueAtTime(baseFreq * 0.7, now + tone.decay * 0.8);
+    }
+
+    // Oscillator 2 (harmonic)
+    const osc2 = audioCtx.createOscillator();
+    osc2.type = tone.osc2;
+    osc2.frequency.setValueAtTime(baseFreq * tone.mult, now);
+
+    // Noise burst for attack transient
+    const noiseLen = Math.floor(audioCtx.sampleRate * 0.03);
+    const noiseBuf = audioCtx.createBuffer(1, noiseLen, audioCtx.sampleRate);
+    const noiseData = noiseBuf.getChannelData(0);
+    for (let i = 0; i < noiseLen; i++) {
+        noiseData[i] = (Math.random() * 2 - 1) * (1 - i / noiseLen);
+    }
+    const noiseSrc = audioCtx.createBufferSource();
+    noiseSrc.buffer = noiseBuf;
+    const noiseGain = audioCtx.createGain();
+    noiseGain.gain.setValueAtTime(tone.noiseAmt * velocity, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
+    noiseSrc.connect(noiseGain);
+
+    // Filter — velocity controls brightness
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(baseFreq * (0.5 + velocity * 2.0), now);
+    filter.Q.setValueAtTime(tone.Q, now);
+
+    // Tap gain envelope
+    const vol = 0.32 * velocity;
+    const decay = tone.decay * (0.65 + velocity * 0.7);
+    const tapGain = audioCtx.createGain();
+    tapGain.gain.setValueAtTime(vol, now);
+    tapGain.gain.exponentialRampToValueAtTime(0.001, now + decay);
+
+    // Panning for stereo separation
+    const panner = audioCtx.createStereoPanner();
+    panner.pan.value = side === 'left' ? -0.4 : 0.4;
+
+    // Wire the per-tap graph
+    osc1.connect(filter);
+    osc2.connect(filter);
+
+    let outputNode = filter;
+
+    // Distortion (per-tap instance using shared curve data)
+    if (distortionEnabled) {
+        const dist = audioCtx.createWaveShaper();
+        dist.curve = distortionCurve;
+        dist.oversample = '4x';
+        outputNode.connect(dist);
+        outputNode = dist;
+    }
+
+    outputNode.connect(tapGain);
+    noiseGain.connect(tapGain);
+    tapGain.connect(panner);
+    panner.connect(masterGain);
+
+    // Delay send
+    if (delayEnabled) {
+        const send = audioCtx.createGain();
+        send.gain.value = 0.3;
+        tapGain.connect(send);
+        send.connect(delayNode);
+    }
+
+    // Reverb send
+    if (reverbEnabled) {
+        const send = audioCtx.createGain();
+        send.gain.value = 0.4;
+        tapGain.connect(send);
+        send.connect(convolverNode);
+    }
+
+    osc1.start(now);
+    osc2.start(now);
+    noiseSrc.start(now);
+    osc1.stop(now + decay + 0.05);
+    osc2.stop(now + decay + 0.05);
+    noiseSrc.stop(now + 0.035);
+
+    // UI updates
+    const soundNames = {
+        'left-toe': '🦶 L Toe', 'left-heel': '👠 L Heel',
+        'right-toe': '🦶 R Toe', 'right-heel': '👠 R Heel'
+    };
+    document.getElementById('currentSound').textContent = soundNames[soundId] || soundId;
+    document.getElementById('velocityBar').style.width = (velocity * 100) + '%';
+    totalTaps++;
+    document.getElementById('tapCount').textContent = totalTaps;
+    updateBPM();
+}
+
+// ════════════════════════════════════════════════════════════
+//  WAVEFORM VISUALIZER
+// ════════════════════════════════════════════════════════════
+function drawVisualizer() {
+    requestAnimationFrame(drawVisualizer);
+    if (!analyserNode) return;
+
+    const canvas = document.getElementById('visualizer');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width = canvas.clientWidth * 2;
+    const H = canvas.height = canvas.clientHeight * 2;
+    ctx.clearRect(0, 0, W, H);
+
+    // Frequency bars
+    const freqData = new Uint8Array(analyserNode.frequencyBinCount);
+    analyserNode.getByteFrequencyData(freqData);
+    const barCount = 28;
+    const barW = W / barCount - 2;
+    for (let i = 0; i < barCount; i++) {
+        const idx = Math.floor(i * freqData.length / barCount);
+        const val = freqData[idx];
+        const h = (val / 255) * H;
+        const hue = 30 + (i / barCount) * 30;
+        ctx.fillStyle = `hsla(${hue}, 100%, 55%, 0.7)`;
+        ctx.fillRect(i * (barW + 2), H - h, barW, h);
+    }
+
+    // Waveform overlay
+    const waveData = new Uint8Array(analyserNode.frequencyBinCount);
+    analyserNode.getByteTimeDomainData(waveData);
+    ctx.strokeStyle = '#ffd70099';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    const step = W / waveData.length;
+    for (let i = 0; i < waveData.length; i++) {
+        const y = (waveData[i] / 255) * H;
+        i === 0 ? ctx.moveTo(0, y) : ctx.lineTo(i * step, y);
+    }
+    ctx.stroke();
+}
+
+// ════════════════════════════════════════════════════════════
+//  RHYTHM PLAYER
+// ════════════════════════════════════════════════════════════
+let rhythmState = { playing: false, current: null, timeouts: [] };
+
+function playRhythm(name) {
+    stopRhythm();
+    initAudio();
+    const rhythm = rhythms[name];
+    if (!rhythm) return;
+    rhythmState.playing = true;
+    rhythmState.current = name;
+
+    const beatMs = 60000 / rhythm.bpm;
+
+    function schedule(offset) {
+        if (!rhythmState.playing) return;
+        rhythm.notes.forEach(note => {
+            const delay = offset + note.beat * beatMs;
+            const t = setTimeout(() => {
+                if (!rhythmState.playing) return;
+                // Handle actions (preset/effect changes)
+                if (note.action) {
+                    if (note.action === 'preset') setPreset(note.value);
+                    else if (note.action === 'fx') toggleEffect(note.fx, note.enabled);
+                    else if (note.action === 'fx-off-all') {
+                        toggleEffect('distortion', false);
+                        toggleEffect('reverb', false);
+                        toggleEffect('delay', false);
+                    }
+                    return;
+                }
+                triggerTap(note.sound, note.velocity);
+            }, delay);
+            rhythmState.timeouts.push(t);
+        });
+        if (rhythm.loop) {
+            const t = setTimeout(() => {
+                if (rhythmState.playing) schedule(0);
+            }, offset + rhythm.beats * beatMs);
+            rhythmState.timeouts.push(t);
+        }
+    }
+    schedule(0);
+
+    // UI
+    document.querySelectorAll('.rhythm-btn').forEach(b => b.classList.remove('playing'));
+    const btn = document.querySelector(`.rhythm-btn[data-rhythm="${name}"]`);
+    if (btn) btn.classList.add('playing');
+    document.getElementById('stopBtn').classList.add('visible');
+}
+
+function stopRhythm() {
+    rhythmState.playing = false;
+    rhythmState.timeouts.forEach(t => clearTimeout(t));
+    rhythmState.timeouts = [];
+    rhythmState.current = null;
+    document.querySelectorAll('.rhythm-btn').forEach(b => b.classList.remove('playing'));
+    document.getElementById('stopBtn').classList.remove('visible');
+}
+
+// ════════════════════════════════════════════════════════════
+//  3D SCENE
+// ════════════════════════════════════════════════════════════
+function init() {
+    const container = document.getElementById('canvas-container');
+
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0d0d1a);
+    scene.fog = new THREE.Fog(0x0d0d1a, 12, 25);
+
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 5, 8);
+    camera.lookAt(0, 0, 0);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+    container.appendChild(renderer.domElement);
+
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.minDistance = 3;
+    controls.maxDistance = 15;
+    controls.target.set(0, 0.5, 0);
+
+    // ── Lighting ──
+    const ambient = new THREE.AmbientLight(0xffffff, 0.35);
+    scene.add(ambient);
+
+    const mainLight = new THREE.DirectionalLight(0xfff5e6, 0.7);
+    mainLight.position.set(5, 10, 5);
+    mainLight.castShadow = true;
+    mainLight.shadow.mapSize.set(2048, 2048);
+    mainLight.shadow.camera.near = 0.5;
+    mainLight.shadow.camera.far = 30;
+    scene.add(mainLight);
+
+    const fillLight = new THREE.DirectionalLight(0xe6e6ff, 0.25);
+    fillLight.position.set(-5, 5, -5);
+    scene.add(fillLight);
+
+    // Stage spotlights — colored like a real stage
+    const spotL = new THREE.SpotLight(0xff4444, 0.6, 18, Math.PI / 6, 0.5, 1);
+    spotL.position.set(-4, 8, 3);
+    spotL.target.position.set(-1.5, 0, 0);
+    spotL.castShadow = true;
+    scene.add(spotL);
+    scene.add(spotL.target);
+
+    const spotR = new THREE.SpotLight(0x4466ff, 0.6, 18, Math.PI / 6, 0.5, 1);
+    spotR.position.set(4, 8, 3);
+    spotR.target.position.set(1.5, 0, 0);
+    spotR.castShadow = true;
+    scene.add(spotR);
+    scene.add(spotR.target);
+
+    const spotFront = new THREE.SpotLight(0xffd700, 0.3, 20, Math.PI / 5, 0.6, 1);
+    spotFront.position.set(0, 6, 8);
+    spotFront.target.position.set(0, 0, 0);
+    scene.add(spotFront);
+    scene.add(spotFront.target);
+
+    createFloor();
+
+    leftShoe = createShoe('left');
+    leftShoe.position.set(-1.5, 0, 0);
+    leftShoe.rotation.y = 0.1;
+    scene.add(leftShoe);
+
+    rightShoe = createShoe('right');
+    rightShoe.position.set(1.5, 0, 0);
+    rightShoe.rotation.y = -0.1;
+    scene.add(rightShoe);
+
+    document.getElementById('loading').style.display = 'none';
+
+    setupRaycaster();
+    window.addEventListener('resize', onWindowResize);
+    setupKeyboardControls();
+    setupTabControls();
+    setupUIControls();
+
+    animate();
+}
+
+function createFloor() {
+    // Stage floor — dark glossy wood
+    const floorGeo = new THREE.PlaneGeometry(30, 30);
+    const floorMat = new THREE.MeshStandardMaterial({
+        color: 0x2a1a0e, roughness: 0.4, metalness: 0.15
+    });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = 0;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    // Wood grain lines
+    for (let i = -15; i < 15; i += 0.35) {
+        const lineGeo = new THREE.PlaneGeometry(0.012, 30);
+        const lineMat = new THREE.MeshBasicMaterial({ color: 0x1a0f06, transparent: true, opacity: 0.5 });
+        const line = new THREE.Mesh(lineGeo, lineMat);
+        line.rotation.x = -Math.PI / 2;
+        line.position.set(i + Math.random() * 0.05, 0.001, 0);
+        scene.add(line);
+    }
+}
+
+function createShoe(side) {
+    const shoe = new THREE.Group();
+    shoe.userData = { side: side };
+    const isRight = side === 'right';
+
+    // ── Materials ──
+    const leatherMat = new THREE.MeshStandardMaterial({
+        color: 0x1a1a1a, roughness: 0.35, metalness: 0.08
+    });
+    const soleMat = new THREE.MeshStandardMaterial({
+        color: 0x222222, roughness: 0.9, metalness: 0
+    });
+    const tapPlateMat = new THREE.MeshStandardMaterial({
+        color: 0xc0c0c0, roughness: 0.15, metalness: 0.92
+    });
+    const stitchMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
+
+    // ── SOLE ──
+    const soleLen = 2.8, soleW = 1.0, soleH = 0.12;
+    const soleShape = new THREE.Shape();
+    soleShape.moveTo(0, -soleLen / 2 + 0.3);
+    soleShape.quadraticCurveTo(soleW / 2 + 0.1, -soleLen / 2 + 0.5, soleW / 2, -soleLen / 4);
+    soleShape.quadraticCurveTo(soleW / 2 - 0.05, 0, soleW / 2 - 0.1, soleLen / 4);
+    soleShape.quadraticCurveTo(soleW / 2 - 0.15, soleLen / 2 - 0.3, soleW / 3, soleLen / 2 - 0.1);
+    soleShape.quadraticCurveTo(0, soleLen / 2 + 0.1, -soleW / 3, soleLen / 2 - 0.1);
+    soleShape.quadraticCurveTo(-soleW / 2 + 0.15, soleLen / 2 - 0.3, -soleW / 2 + 0.1, soleLen / 4);
+    soleShape.quadraticCurveTo(-soleW / 2 + 0.05, 0, -soleW / 2, -soleLen / 4);
+    soleShape.quadraticCurveTo(-soleW / 2 - 0.1, -soleLen / 2 + 0.5, 0, -soleLen / 2 + 0.3);
+
+    const sole = new THREE.Mesh(
+        new THREE.ExtrudeGeometry(soleShape, { depth: soleH, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02 }),
+        soleMat
+    );
+    sole.rotation.x = -Math.PI / 2;
+    sole.position.y = 0;
+    sole.castShadow = true;
+    sole.receiveShadow = true;
+    shoe.add(sole);
+
+    // ── TOE TAP PLATE ──
+    const toeTapShape = new THREE.Shape();
+    toeTapShape.ellipse(0, 0, 0.35, 0.45, 0, Math.PI * 2);
+    const toeTap = new THREE.Mesh(
+        new THREE.ExtrudeGeometry(toeTapShape, { depth: 0.035, bevelEnabled: true, bevelThickness: 0.005, bevelSize: 0.005 }),
+        tapPlateMat.clone()
+    );
+    toeTap.rotation.x = -Math.PI / 2;
+    toeTap.position.set(0, 0.001, soleLen / 2 - 0.5);
+    toeTap.userData = { type: 'tap', sound: `${side}-toe`, part: 'toe' };
+    toeTap.castShadow = true;
+    shoe.add(toeTap);
+    tapPlates[`${side}-toe`] = toeTap;
+
+    // Toe plate screws (decorative detail)
+    const screwMat = new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.95, roughness: 0.2 });
+    [[-0.18, 0.25], [0.18, 0.25], [-0.15, -0.25], [0.15, -0.25]].forEach(([x, z]) => {
+        const screw = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.01, 8), screwMat);
+        screw.position.set(x, 0.04, soleLen / 2 - 0.5 + z);
+        screw.userData = { type: 'tap', sound: `${side}-toe`, part: 'toe' };
+        shoe.add(screw);
+    });
+
+    // ── HEEL TAP PLATE ──
+    const heelTap = new THREE.Mesh(
+        new THREE.BoxGeometry(0.55, 0.035, 0.4),
+        tapPlateMat.clone()
+    );
+    heelTap.position.set(0, 0.017, -soleLen / 2 + 0.45);
+    heelTap.userData = { type: 'tap', sound: `${side}-heel`, part: 'heel' };
+    heelTap.castShadow = true;
+    shoe.add(heelTap);
+    tapPlates[`${side}-heel`] = heelTap;
+
+    // Heel plate screws
+    [[-0.2, 0.12], [0.2, 0.12], [-0.2, -0.12], [0.2, -0.12]].forEach(([x, z]) => {
+        const screw = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.01, 8), screwMat);
+        screw.position.set(x, 0.035, -soleLen / 2 + 0.45 + z);
+        screw.userData = { type: 'tap', sound: `${side}-heel`, part: 'heel' };
+        shoe.add(screw);
+    });
+
+    // ── TOE BOX ──
+    const toeGeo = new THREE.SphereGeometry(0.5, 32, 32);
+    toeGeo.scale(0.9, 0.5, 0.8);
+    const toe = new THREE.Mesh(toeGeo, leatherMat);
+    toe.position.set(0, 0.35, soleLen / 2 - 0.45);
+    toe.castShadow = true;
+    shoe.add(toe);
+
+    // Toe cap stitch line
+    const capCurve = new THREE.EllipseCurve(0, 0, 0.38, 0.32, 0, Math.PI, false, 0);
+    const capPts = capCurve.getPoints(20);
+    const capGeo = new THREE.BufferGeometry().setFromPoints(capPts.map(p => new THREE.Vector3(p.x, 0, p.y)));
+    const capLine = new THREE.Line(capGeo, new THREE.LineBasicMaterial({ color: 0x333333 }));
+    capLine.position.set(0, 0.56, soleLen / 2 - 0.5);
+    capLine.rotation.x = -Math.PI / 2;
+    shoe.add(capLine);
+
+    // ── VAMP ──
+    const vamp = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.25, 1.0), leatherMat);
+    vamp.position.set(0, 0.38, soleLen / 4);
+    vamp.castShadow = true;
+    shoe.add(vamp);
+
+    // ── TONGUE ──
+    const tongue = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.06, 0.9), leatherMat);
+    tongue.position.set(0, 0.52, 0.2);
+    tongue.rotation.x = 0.15;
+    shoe.add(tongue);
+
+    // ── QUARTERS (sides) ──
+    const qL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.4, 1.2), leatherMat);
+    qL.position.set(isRight ? 0.4 : -0.4, 0.32, -0.3);
+    qL.castShadow = true;
+    shoe.add(qL);
+
+    const qR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.4, 1.2), leatherMat);
+    qR.position.set(isRight ? -0.4 : 0.4, 0.32, -0.3);
+    qR.castShadow = true;
+    shoe.add(qR);
+
+    // ── HEEL COUNTER ──
+    const heelCounter = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.45, 0.5, 0.5, 32, 1, true, Math.PI * 0.75, Math.PI * 0.5),
+        leatherMat
+    );
+    heelCounter.position.set(0, 0.35, -soleLen / 2 + 0.5);
+    heelCounter.rotation.y = Math.PI;
+    heelCounter.castShadow = true;
+    shoe.add(heelCounter);
+
+    const heelBack = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.45, 0.15), leatherMat);
+    heelBack.position.set(0, 0.32, -soleLen / 2 + 0.35);
+    shoe.add(heelBack);
+
+    // ── HEEL BLOCK ──
+    const heelBlock = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.25, 0.55), leatherMat);
+    heelBlock.position.set(0, 0.245, -soleLen / 2 + 0.45);
+    heelBlock.castShadow = true;
+    shoe.add(heelBlock);
+
+    const heelLift = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.15, 0.5), soleMat);
+    heelLift.position.set(0, 0.195, -soleLen / 2 + 0.45);
+    shoe.add(heelLift);
+
+    // ── LACES ──
+    const laceMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+    for (let i = 0; i < 4; i++) {
+        const laceGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.32);
+        laceGeo.rotateZ(Math.PI / 2);
+        const lace = new THREE.Mesh(laceGeo, laceMat);
+        lace.position.set(0, 0.5 + i * 0.015, 0.5 - i * 0.18);
+        shoe.add(lace);
+    }
+    // Bow loops
+    const bowGeo = new THREE.TorusGeometry(0.07, 0.015, 8, 16, Math.PI);
+    const bowL = new THREE.Mesh(bowGeo, laceMat);
+    bowL.position.set(-0.08, 0.55, 0.6);
+    bowL.rotation.set(Math.PI / 2, 0.4, 0);
+    shoe.add(bowL);
+    const bowR = new THREE.Mesh(bowGeo, laceMat);
+    bowR.position.set(0.08, 0.55, 0.6);
+    bowR.rotation.set(Math.PI / 2, -0.4, 0);
+    shoe.add(bowR);
+    // Bow tails
+    const tailGeo = new THREE.CylinderGeometry(0.012, 0.008, 0.15);
+    const tailL = new THREE.Mesh(tailGeo, laceMat);
+    tailL.position.set(-0.12, 0.5, 0.62);
+    tailL.rotation.z = 0.3;
+    shoe.add(tailL);
+    const tailR = new THREE.Mesh(tailGeo, laceMat);
+    tailR.position.set(0.12, 0.5, 0.62);
+    tailR.rotation.z = -0.3;
+    shoe.add(tailR);
+
+    // ── EYELETS ──
+    const eyeletMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.8, roughness: 0.3 });
+    for (let i = 0; i < 4; i++) {
+        const eL = new THREE.Mesh(new THREE.TorusGeometry(0.025, 0.008, 8, 16), eyeletMat);
+        eL.position.set(-0.15, 0.48 + i * 0.015, 0.5 - i * 0.18);
+        eL.rotation.y = Math.PI / 2;
+        shoe.add(eL);
+        const eR = new THREE.Mesh(new THREE.TorusGeometry(0.025, 0.008, 8, 16), eyeletMat);
+        eR.position.set(0.15, 0.48 + i * 0.015, 0.5 - i * 0.18);
+        eR.rotation.y = Math.PI / 2;
+        shoe.add(eR);
+    }
+
+    // ── SOLE EDGE STITCHING (detail) ──
+    const stitchPts = [];
+    for (let a = 0; a < Math.PI * 2; a += 0.15) {
+        const r = 0.48 + Math.sin(a * 3) * 0.02;
+        stitchPts.push(new THREE.Vector3(Math.cos(a) * r * 0.9, 0.14, Math.sin(a) * r * 2.5));
+    }
+    stitchPts.push(stitchPts[0].clone());
+    const stitchGeo = new THREE.BufferGeometry().setFromPoints(stitchPts);
+    const stitchLine = new THREE.Line(stitchGeo, new THREE.LineDashedMaterial({ color: 0x444444, dashSize: 0.04, gapSize: 0.04 }));
+    stitchLine.computeLineDistances();
+    shoe.add(stitchLine);
+
+    // ── INTERNAL COMPONENTS (X-ray view) ──
+    const sensorMat = new THREE.MeshStandardMaterial({
+        color: 0x00ff88, emissive: 0x00ff88, emissiveIntensity: 0.5,
+        transparent: true, opacity: 0.9
+    });
+    const wireMat = new THREE.MeshStandardMaterial({
+        color: 0xff6b6b, emissive: 0xff6b6b, emissiveIntensity: 0.5
+    });
+    const mcuMat = new THREE.MeshStandardMaterial({
+        color: 0x3498db, emissive: 0x3498db, emissiveIntensity: 0.5
+    });
+
+    // Toe sensor
+    const toeSensor = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.04, 0.5), sensorMat);
+    toeSensor.position.set(0, 0.18, soleLen / 2 - 0.5);
+    toeSensor.visible = false;
+    toeSensor.userData.internal = true;
+    shoe.add(toeSensor);
+    internalComponents.push(toeSensor);
+
+    // Heel sensor
+    const heelSensor = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.04, 0.3), sensorMat);
+    heelSensor.position.set(0, 0.22, -soleLen / 2 + 0.45);
+    heelSensor.visible = false;
+    heelSensor.userData.internal = true;
+    shoe.add(heelSensor);
+    internalComponents.push(heelSensor);
+
+    // Wiring
+    const wirePoints = [
+        new THREE.Vector3(0, 0.15, soleLen / 2 - 0.5),
+        new THREE.Vector3(0.1, 0.2, 0),
+        new THREE.Vector3(0, 0.22, -soleLen / 2 + 0.45)
+    ];
+    const wire = new THREE.Mesh(
+        new THREE.TubeGeometry(new THREE.CatmullRomCurve3(wirePoints), 20, 0.02, 8, false),
+        wireMat
+    );
+    wire.visible = false;
+    wire.userData.internal = true;
+    shoe.add(wire);
+    internalComponents.push(wire);
+
+    const wirePoints2 = [
+        new THREE.Vector3(0, 0.15, soleLen / 2 - 0.5),
+        new THREE.Vector3(-0.1, 0.2, 0),
+        new THREE.Vector3(0, 0.22, -soleLen / 2 + 0.45)
+    ];
+    const wire2 = new THREE.Mesh(
+        new THREE.TubeGeometry(new THREE.CatmullRomCurve3(wirePoints2), 20, 0.02, 8, false),
+        wireMat
+    );
+    wire2.visible = false;
+    wire2.userData.internal = true;
+    shoe.add(wire2);
+    internalComponents.push(wire2);
+
+    // MCU
+    const mcu = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.06, 0.25), mcuMat);
+    mcu.position.set(0, 0.2, 0);
+    mcu.visible = false;
+    mcu.userData.internal = true;
+    shoe.add(mcu);
+    internalComponents.push(mcu);
+
+    // Battery
+    const battery = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.08, 0.15), mcuMat);
+    battery.position.set(0, 0.2, -0.5);
+    battery.visible = false;
+    battery.userData.internal = true;
+    shoe.add(battery);
+    internalComponents.push(battery);
+
+    // Bluetooth antenna (small cylinder)
+    const antennaMat = new THREE.MeshStandardMaterial({
+        color: 0x9b59b6, emissive: 0x9b59b6, emissiveIntensity: 0.5
+    });
+    const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.2, 8), antennaMat);
+    antenna.position.set(0.1, 0.28, -0.3);
+    antenna.visible = false;
+    antenna.userData.internal = true;
+    shoe.add(antenna);
+    internalComponents.push(antenna);
+
+    if (isRight) shoe.scale.x = -1;
+    return shoe;
+}
+
+// ════════════════════════════════════════════════════════════
+//  VISUAL EFFECTS — Sparks & Ripples
+// ════════════════════════════════════════════════════════════
+function getTapWorldPos(soundId) {
+    const plate = tapPlates[soundId];
+    if (!plate) return new THREE.Vector3();
+    const pos = new THREE.Vector3();
+    plate.getWorldPosition(pos);
+    return pos;
+}
+
+function createSparks(worldPos, velocity) {
+    const count = Math.floor(4 + velocity * 12);
+    for (let i = 0; i < count; i++) {
+        const geo = new THREE.SphereGeometry(0.01 + Math.random() * 0.012);
+        const hue = 0.08 + Math.random() * 0.12;
+        const mat = new THREE.MeshBasicMaterial({
+            color: new THREE.Color().setHSL(hue, 1, 0.55 + Math.random() * 0.3),
+            transparent: true, opacity: 1
+        });
+        const p = new THREE.Mesh(geo, mat);
+        p.position.copy(worldPos);
+        p.userData.vel = new THREE.Vector3(
+            (Math.random() - 0.5) * 2.5 * velocity,
+            0.5 + Math.random() * 3 * velocity,
+            (Math.random() - 0.5) * 2.5 * velocity
+        );
+        p.userData.life = 0;
+        p.userData.maxLife = 0.3 + Math.random() * 0.4;
+        scene.add(p);
+        activeParticles.push(p);
+    }
+}
+
+function createRipple(worldPos, velocity) {
+    const geo = new THREE.RingGeometry(0.08, 0.13, 32);
+    const mat = new THREE.MeshBasicMaterial({
+        color: 0xffd700, transparent: true, opacity: velocity * 0.8,
+        side: THREE.DoubleSide
+    });
+    const r = new THREE.Mesh(geo, mat);
+    r.rotation.x = -Math.PI / 2;
+    r.position.set(worldPos.x, 0.005, worldPos.z);
+    r.userData.life = 0;
+    r.userData.maxLife = 0.7;
+    r.userData.vel = velocity;
+    scene.add(r);
+    activeRipples.push(r);
+}
+
+function updateVisualEffects(dt) {
+    // Particles
+    for (let i = activeParticles.length - 1; i >= 0; i--) {
+        const p = activeParticles[i];
+        p.userData.life += dt;
+        if (p.userData.life >= p.userData.maxLife) {
+            scene.remove(p);
+            p.geometry.dispose();
+            p.material.dispose();
+            activeParticles.splice(i, 1);
+            continue;
+        }
+        p.position.add(p.userData.vel.clone().multiplyScalar(dt));
+        p.userData.vel.y -= 9.8 * dt;
+        p.material.opacity = 1 - (p.userData.life / p.userData.maxLife);
+    }
+    // Ripples
+    for (let i = activeRipples.length - 1; i >= 0; i--) {
+        const r = activeRipples[i];
+        r.userData.life += dt;
+        if (r.userData.life >= r.userData.maxLife) {
+            scene.remove(r);
+            r.geometry.dispose();
+            r.material.dispose();
+            activeRipples.splice(i, 1);
+            continue;
+        }
+        const prog = r.userData.life / r.userData.maxLife;
+        const s = 1 + prog * 7 * r.userData.vel;
+        r.scale.set(s, s, 1);
+        r.material.opacity = (1 - prog) * r.userData.vel * 0.8;
+    }
+}
+
+// ════════════════════════════════════════════════════════════
+//  INTERACTIONS
+// ════════════════════════════════════════════════════════════
+function triggerTap(soundId, velocity) {
+    if (velocity === undefined) velocity = getKeyVelocity(soundId);
+    playSound(soundId, velocity);
+
+    const plate = tapPlates[soundId];
+    if (!plate) return;
+    const [side, part] = soundId.split('-');
+    const shoe = side === 'left' ? leftShoe : rightShoe;
+
+    // Flash plate — intensity scales with velocity
+    const origColor = plate.material.color.getHex();
+    const flashColor = velocity > 0.8 ? 0xffd700 : 0xddbb44;
+    plate.material.color.setHex(flashColor);
+    plate.material.emissive = new THREE.Color(flashColor);
+    plate.material.emissiveIntensity = 0.5 + velocity * 0.5;
+    setTimeout(() => {
+        plate.material.color.setHex(origColor);
+        plate.material.emissive = new THREE.Color(0x000000);
+        plate.material.emissiveIntensity = 0;
+    }, 120 + velocity * 60);
+
+    animateTap(shoe, part, velocity);
+
+    // Sparks & ripple
+    const worldPos = getTapWorldPos(soundId);
+    createSparks(worldPos, velocity);
+    createRipple(worldPos, velocity);
+
+    // Highlight key
+    const key = document.querySelector(`.key[data-sound="${soundId}"]`);
+    if (key) {
+        key.classList.add('active');
+        setTimeout(() => key.classList.remove('active'), 120);
+    }
+}
+
+function animateTap(shoe, part, velocity) {
+    if (!velocity) velocity = 0.8;
+    const startRot = shoe.rotation.x;
+    const angle = (part === 'toe' ? 0.18 : -0.14) * (0.5 + velocity * 0.5);
+    const duration = 80 + (1 - velocity) * 40;
+    const t0 = Date.now();
+    function anim() {
+        const p = Math.min((Date.now() - t0) / duration, 1);
+        shoe.rotation.x = startRot + angle * (p < 0.5 ? p * 2 : 2 - p * 2);
+        if (p < 1) requestAnimationFrame(anim);
+        else shoe.rotation.x = startRot;
+    }
+    anim();
+}
+
+function setupRaycaster() {
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    renderer.domElement.addEventListener('click', (e) => {
+        mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+        const hits = raycaster.intersectObjects(Object.values(tapPlates));
+        if (hits.length > 0 && hits[0].object.userData.sound) {
+            triggerTap(hits[0].object.userData.sound, 0.85);
+        }
+    });
+}
+
+function setupKeyboardControls() {
+    const keyMap = {
+        'q': 'left-toe',  'Q': 'left-toe',
+        'a': 'left-heel', 'A': 'left-heel',
+        'w': 'right-toe', 'W': 'right-toe',
+        's': 'right-heel','S': 'right-heel'
+    };
+    const pressed = {};
+    document.addEventListener('keydown', (e) => {
+        if (keyMap[e.key] && !pressed[e.key]) {
+            e.preventDefault();
+            pressed[e.key] = true;
+            triggerTap(keyMap[e.key]);
+        }
+    });
+    document.addEventListener('keyup', (e) => {
+        pressed[e.key] = false;
+    });
+    document.querySelectorAll('.key').forEach(key => {
+        key.addEventListener('mousedown', () => triggerTap(key.dataset.sound, 0.85));
+    });
+}
+
+function setupTabControls() {
+    const btns = document.querySelectorAll('.tab-btn');
+    const legend = document.getElementById('legend');
+    btns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            btns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            isXrayMode = btn.dataset.view === 'xray';
+            updateXrayMode();
+            legend.classList.toggle('visible', isXrayMode);
+        });
+    });
+}
+
+function updateXrayMode() {
+    [leftShoe, rightShoe].forEach(shoe => {
+        shoe.traverse(child => {
+            if (!child.isMesh) return;
+            if (child.userData.internal) {
+                child.visible = isXrayMode;
+            } else if (child.userData.type === 'tap') {
+                if (isXrayMode) {
+                    if (!originalMaterials.has(child.uuid)) originalMaterials.set(child.uuid, child.material.clone());
+                    child.material.transparent = true;
+                    child.material.opacity = 0.7;
+                } else {
+                    child.material.transparent = false;
+                    child.material.opacity = 1;
+                }
+            } else {
+                if (isXrayMode) {
+                    if (!originalMaterials.has(child.uuid)) originalMaterials.set(child.uuid, child.material.clone());
+                    child.material = child.material.clone();
+                    child.material.transparent = true;
+                    child.material.opacity = 0.12;
+                    child.material.color.setHex(0x4444aa);
+                } else {
+                    if (originalMaterials.has(child.uuid)) child.material = originalMaterials.get(child.uuid);
+                }
+            }
+        });
+    });
+}
+
+// ════════════════════════════════════════════════════════════
+//  UI CONTROLS — Presets, Effects, Rhythms
+// ════════════════════════════════════════════════════════════
+function setPreset(name) {
+    if (!presets[name]) return;
+    currentPreset = name;
+    document.querySelectorAll('.preset-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.preset === name);
+    });
+}
+
+function toggleEffect(fx, forceState) {
+    if (fx === 'distortion') {
+        distortionEnabled = forceState !== undefined ? forceState : !distortionEnabled;
+        document.getElementById('fxDist').classList.toggle('active-dist', distortionEnabled);
+    } else if (fx === 'reverb') {
+        reverbEnabled = forceState !== undefined ? forceState : !reverbEnabled;
+        document.getElementById('fxRev').classList.toggle('active-rev', reverbEnabled);
+    } else if (fx === 'delay') {
+        delayEnabled = forceState !== undefined ? forceState : !delayEnabled;
+        document.getElementById('fxDel').classList.toggle('active-del', delayEnabled);
+    }
+}
+
+function setupUIControls() {
+    // Preset buttons
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => setPreset(btn.dataset.preset));
+    });
+
+    // Effect buttons
+    document.querySelectorAll('.fx-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            initAudio();
+            toggleEffect(btn.dataset.fx);
+        });
+    });
+
+    // Rhythm buttons
+    document.querySelectorAll('.rhythm-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (rhythmState.current === btn.dataset.rhythm) {
+                stopRhythm();
+            } else {
+                playRhythm(btn.dataset.rhythm);
+            }
+        });
+    });
+
+    // Stop button
+    document.getElementById('stopBtn').addEventListener('click', stopRhythm);
+}
+
+// ════════════════════════════════════════════════════════════
+//  MAIN LOOP
+// ════════════════════════════════════════════════════════════
+function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    const dt = clock.getDelta();
+    controls.update();
+    updateVisualEffects(dt);
+    renderer.render(scene, camera);
+}
+
+init();
+</script>
+</body>
+</html>
